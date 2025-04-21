@@ -15,6 +15,8 @@ services:
       - '--providers.docker.exposedbydefault=false'
       # Entry points
       - '--entrypoints.websecure.address=:443'
+      - '--entrypoints.web.address=:80'
+      - "--entrypoints.traefik.address=:8282"
       # - '--entrypoints.dashboard.address=:8082'
       # Let's Encrypt
       - "--certificatesresolvers.route53resolver.acme.email=${ACME_EMAIL}"
@@ -22,17 +24,19 @@ services:
       - "--certificatesresolvers.route53resolver.acme.dnschallenge=true"
       - "--certificatesresolvers.route53resolver.acme.dnschallenge.provider=route53"
       - "--certificatesresolvers.route53resolver.acme.dnschallenge.resolvers=1.1.1.1:53,1.0.0.1:53" # fix DNS-01 challenge with AWS Route53
-      - "--log.level=DEBUG"
+      - "--log.level=DEBUG" # (Default: error) DEBUG, INFO, WARN, ERROR, FATAL, PANIC
+      - --accessLog=true
+      - --accessLog.filePath=/traefik.log
+      - --accessLog.bufferingSize=100 # Configuring a buffer of 100 lines
+      - --accessLog.filters.statusCodes=400-499
 
-      # - '--certificatesresolvers.mytlschallenge.acme.tlschallenge=true'
-      # - '--certificatesresolvers.mytlschallenge.acme.email=${SSL_EMAIL}'
-      # - '--certificatesresolvers.mytlschallenge.acme.storage=/letsencrypt/acme.json'
     ports:
       - '443:443'
       - '80:80'
-      - "8082:8082"
+      - "8282:8282"
     volumes:
       - ${DATA_FOLDER}/letsencrypt:/letsencrypt
+      - ${DATA_FOLDER}/traefik3/traefik.log:/traefik.log
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
@@ -43,20 +47,20 @@ services:
     labels:
       #___ core configs
       - traefik.enable=true
-      - "traefik.http.routers.dashboard.rule=Host(`${DOMAIN_NAME}`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))"
-      - "traefik.http.routers.dashboard.entrypoints=websecure"
-      - "traefik.http.routers.dashboard.service=api@internal"
-      - "traefik.http.routers.dashboard.tls=true"
-      - "traefik.http.routers.dashboard.tls.certresolver=route53resolver"
+      - "traefik.http.routers.traefik.rule=Host(`${DOMAIN_NAME}`) && (PathPrefix(`/traefik`) || PathPrefix(`/api`))"
+      - "traefik.http.routers.traefik.entrypoints=websecure"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.tls=true"
+      - "traefik.http.routers.traefik.tls.certresolver=route53resolver"
       #___ Ping is open to the world to let third party monitor traefik availability / healthcheck) (without basicauth)
       - "traefik.http.routers.ping.rule=Host(`${DOMAIN_NAME}`) && Path(`/ping`)"
       - "traefik.http.routers.ping.service=ping@internal"
       - "traefik.http.routers.ping.tls.certresolver=route53resolver"
       - "traefik.http.routers.ping.tls=true"
       #___ use these middlewares
-      - "traefik.http.routers.dashboard.middlewares=auth_all,dashboard-strip"
-      #___ specific middleware for traefik (it enables the dashboard at mydomain.com/dashboard)
-      - "traefik.http.middlewares.dashboard-strip.stripprefix.prefixes=/dashboard"
+      - "traefik.http.routers.traefik.middlewares=auth_all,traefik-strip"
+      #___ specific middleware for traefik (it enables the traefik at mydomain.com/traefik)
+      - "traefik.http.middlewares.traefik-strip.stripprefix.prefixes=/traefik"
 
       # Middleware GROUPS
       # ========================================================
@@ -126,12 +130,12 @@ services:
       - '5678:5678'
     labels:
       - traefik.enable=true
-      - "traefik.http.routers.n8n.rule=Host(`${DOMAIN_NAME}`)"
+      - "traefik.http.routers.n8n.rule=Host(`${DOMAIN_NAME}`) && (PathPrefix(`/${SUBFOLDER1}`))"
       - "traefik.http.routers.n8n.tls=true"
       - "traefik.http.routers.n8n.entrypoints=websecure"
-      - 'traefik.http.routers.n8n.rule=PathPrefix(`/${SUBFOLDER1}`)'
+      # - 'traefik.http.routers.n8n.rule=PathPrefix(`/${SUBFOLDER1}`)'
       - 'traefik.http.middlewares.n8n-stripprefix.stripprefix.prefixes=/${SUBFOLDER1}'
-      # - 'traefik.http.routers.n8n.middlewares=n8n-stripprefix'
+      - 'traefik.http.routers.n8n.middlewares=n8n-stripprefix'
       - traefik.http.routers.n8n.tls.certresolver=route53resolver
       - traefik.http.routers.n8n.tls.domains[0].main=${DOMAIN_NAME}
       # - traefik.http.middlewares.n8n.headers.SSLRedirect=true
@@ -143,7 +147,7 @@ services:
       # - traefik.http.middlewares.n8n.headers.STSIncludeSubdomains=true
       # - traefik.http.middlewares.n8n.headers.STSPreload=true
       #### Apply rules (middlewares)
-      - "traefik.http.routers.n8n.middlewares=RuleGrpMain"
+      # - "traefik.http.routers.n8n.middlewares=RuleGrpMain"
     environment:
       - N8N_HOST=${DOMAIN_NAME}
       - N8N_PORT=5678
@@ -165,12 +169,12 @@ services:
     labels:
       - traefik.enable=true
       - "traefik.http.services.openwebui.loadbalancer.server.port=8080"
-      - "traefik.http.routers.openwebui.rule=Host(`${DOMAIN_NAME}`)"
+      - "traefik.http.routers.openwebui.rule=Host(`${DOMAIN_NAME}`) && (PathPrefix(`/${SUBFOLDER2}`))"
       - "traefik.http.routers.openwebui.tls=true"
       - "traefik.http.routers.openwebui.entrypoints=websecure"
-      - "traefik.http.routers.openwebui.rule=PathPrefix(`/${SUBFOLDER2}`)"
+      # - "traefik.http.routers.openwebui.rule=PathPrefix(`/${SUBFOLDER2}`)"
       - "traefik.http.middlewares.openwebui-stripprefix.stripprefix.prefixes=/${SUBFOLDER2}"
-      # - "traefik.http.routers.openwebui.middlewares=openwebui-stripprefix"
+      - "traefik.http.routers.openwebui.middlewares=openwebui-stripprefix"
       - "traefik.http.routers.openwebui.tls.certresolver=route53resolver"
       - "traefik.http.routers.openwebui.tls.domains[0].main=${DOMAIN_NAME}"
       # - traefik.http.middlewares.openwebui.headers.SSLRedirect=true
@@ -182,7 +186,7 @@ services:
       # - traefik.http.middlewares.openwebui.headers.STSIncludeSubdomains=true
       # - traefik.http.middlewares.openwebui.headers.STSPreload=true
       #### Apply rules (middlewares)
-      - "traefik.http.routers.openwebui.middlewares=RuleGrpMain"
+      # - "traefik.http.routers.openwebui.middlewares=RuleGrpMain"
     environment:
       - OPENWEBUI_PATH
       - WEBHOOK_URL=https://${DOMAIN_NAME}${OPENWEBUI_PATH}
