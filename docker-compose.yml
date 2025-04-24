@@ -130,6 +130,7 @@ services:
       - '5678:5678'
     labels:
       - traefik.enable=true
+      - "traefik.http.services.n8n.loadbalancer.server.port=5678"
       - "traefik.http.routers.n8n.rule=Host(`${DOMAIN_NAME}`) && (PathPrefix(`/${SUBFOLDER1}`))"
       - "traefik.http.routers.n8n.tls=true"
       - "traefik.http.routers.n8n.entrypoints=websecure"
@@ -169,12 +170,13 @@ services:
     labels:
       - traefik.enable=true
       - "traefik.http.services.openwebui.loadbalancer.server.port=8080"
-      - "traefik.http.routers.openwebui.rule=Host(`${DOMAIN_NAME}`) && (PathPrefix(`/${SUBFOLDER2}`))"
+      # - "traefik.http.routers.openwebui.rule=Host(`${DOMAIN_NAME}`) && (PathPrefix(`/${SUBFOLDER2}`))"
+      - "traefik.http.routers.openwebui.rule=Host(`${DOMAIN_NAME}`) && (PathPrefix(`/`))"
       - "traefik.http.routers.openwebui.tls=true"
       - "traefik.http.routers.openwebui.entrypoints=websecure"
       # - "traefik.http.routers.openwebui.rule=PathPrefix(`/${SUBFOLDER2}`)"
-      - "traefik.http.middlewares.openwebui-stripprefix.stripprefix.prefixes=/${SUBFOLDER2}"
-      - "traefik.http.routers.openwebui.middlewares=openwebui-stripprefix"
+      # - "traefik.http.middlewares.openwebui-stripprefix.stripprefix.prefixes=/${SUBFOLDER2}"
+      # - "traefik.http.routers.openwebui.middlewares=openwebui-stripprefix"
       - "traefik.http.routers.openwebui.tls.certresolver=route53resolver"
       - "traefik.http.routers.openwebui.tls.domains[0].main=${DOMAIN_NAME}"
       # - traefik.http.middlewares.openwebui.headers.SSLRedirect=true
@@ -189,7 +191,7 @@ services:
       # - "traefik.http.routers.openwebui.middlewares=RuleGrpMain"
     environment:
       - OPENWEBUI_PATH
-      - WEBHOOK_URL=https://${DOMAIN_NAME}${OPENWEBUI_PATH}
+      # - WEBHOOK_URL=https://${DOMAIN_NAME}${OPENWEBUI_PATH}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${DATA_FOLDER}/open-webui:/app/backend/data
